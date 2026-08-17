@@ -1,0 +1,391 @@
+---
+title: "Erupción de Volcanes en Indonesia"
+author: "Ernesto Álvarez"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# Introducción
+
+Indonesia, un país con más de **13,000 islas**, se sitúa en el "***Anillo de Fuego del Pacífico***", una región conocida por su intensa actividad sísmica y volcánica. Esta ubicación expone al país a constantes riesgos de terremotos y erupciones volcánicas. Se estima que posee **127 volcanes activos** distribuidos a lo largo del país, desde el noroeste de Sumatra hasta las remotas islas del este, como la isla Banda.
+
+Con una población de más de **270 millones** de personas, las erupciones volcánicas representan una amenaza importante para la vida y los bienes de los habitantes de Indonesia. Estos eventos pueden provocar una serie de desastres naturales, como flujos de lava, caída de cenizas, tsunamis volcánicos y deslizamientos de lodo, que pueden causar devastación en las comunidades locales y afectar áreas más extensas.
+
+La investigación y comprensión de los datos sobre erupciones volcánicas a lo largo del tiempo son esenciales para mejorar la preparación y la respuesta ante futuras catástrofes. Este estudio tiene como objetivo **examinar los registros de erupciones desde el año** **1300 hasta la actualidad**, centrándose especialmente en aquellas que han tenido consecuencias mortales. Al visualizar estos datos, se pretende compartir la historia de estas erupciones, aprender de ellas y desarrollar estrategias más efectivas para mitigar los riesgos asociados con estos fenómenos naturales.
+
+Instalaremos y cargaremos los paquetes que usaremos. Además, crearemos una función para crear el "lienzo" de los gráficos:
+
+```{r}
+fig <- function(width, heigth){
+     options(repr.plot.width = width, repr.plot.height = heigth)
+}
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(cowplot)
+options(warn=-1, message=FALSE)
+```
+
+# Carga de datos
+
+Cargamos los datos desde su ubicación en el dispositivo y estandarizaremos los nombres de las columnas:
+
+```{r}
+volcano_events <- read_csv("C:/Users/ERNESTO CAM/Documents/volcano-events-1300-2021.csv", show_col_type=FALSE)
+```
+
+```{r}
+v_events <- volcano_events %>% clean_names() 
+# glimpse(v_events)
+# skim_without_charts(v_events)
+
+```
+
+Una pieza esencial de información ausente es el **Índice de Explosividad Volcánica *(VEI)***, de acuerdo con Newhal y Self en 1982. En el caso de erupciones históricas que claramente fueron explosivas pero no tienen otros detalles descriptivos, **se les asigna un VEI predeterminado de 2**.
+
+```{r}
+v_events <- v_events %>% mutate(vei = if_else(is.na(vei), 2, vei),
+                               total_deaths = if_else(is.na(total_deaths), 0, total_deaths))
+# glimpse(v_events)
+```
+
+# Observación de datos
+
+Ahora vamos a examinar los datos desde distintos puntos de vista. ¿Qué podemos inferir desde cada uno de ellos?
+
+## Ubicación del Monte
+
+En Java, se han registrado 114 erupciones, mientras que en Nusatenggara, hay 24 islas con actividad volcánica. La población de Java supera los 150 millones de habitantes.
+
+```{r}
+fig(12, 7)
+n_eruptbyisland <- v_events %>% 
+  group_by(island) %>% 
+  summarize(cnt_mount=n())
+
+ggplot(data=n_eruptbyisland, aes(x=reorder(island, -cnt_mount), y=cnt_mount, fill=island)) +
+  geom_bar(stat="identity", width=0.9, color="white") +
+  geom_text(aes(label=cnt_mount), position=position_stack(vjust=0.5), size=5) +
+  labs(title="Number of Eruptions by Island") +
+  xlab("Island") +
+  ylab("Number of Mountains") +
+  theme(legend.position = "none", text = element_text(size=18))
+```
+
+## Las diez erupciones volcánicas más destacadas de montes
+
+Se presentan las diez erupciones principales que han ocurrido en montes:
+
+```{r}
+fig(12, 7)
+n_eruptbymountain <- v_events %>% 
+  group_by(name) %>% 
+  summarise(cnt_bymount=n()) %>% 
+  arrange(desc(cnt_bymount))
+
+top10_eruptbymountain <- n_eruptbymountain %>% top_n(10) %>% arrange(desc(cnt_bymount))
+
+ggplot(data=top10_eruptbymountain, aes(x=reorder(name, -cnt_bymount), y=cnt_bymount, fill=name)) +
+  geom_bar(stat="identity", width=0.9, color="white") +
+  scale_x_discrete(guide = guide_axis(angle=45)) +
+  geom_text(aes(label=cnt_bymount), position=position_stack(vjust=0.5), size=5) +
+  labs(title="Number of Eruption by Mountain") +
+  xlab("Mountains Name") +
+  ylab("Eruptions") +
+  theme(legend.position = "none", text = element_text(size=18))
+```
+
+## Índice de Explosividad Volcánica (VEI)
+
+Es un sistema de clasificación muy utilizado para describir el tamaño de las erupciones explosivas. Su fundamento principal radica en la cantidad de masa o volumen expulsado durante la erupción, como se estableció en 1982 por Newhall y Self. Las erupciones históricas que claramente fueron explosivas pero no cuentan con otra información descriptiva se les asigna un VEI predeterminado de 2. Este índice varía de 0 a 8.
+
+```{r}
+vei_eruptions <- v_events %>% group_by(vei) %>% summarise(cnt_vei=n())
+ggplot(data=vei_eruptions, aes(x=reorder(vei, -cnt_vei), y=cnt_vei, fill=vei)) +
+  geom_bar(stat="identity", width=0.8, color="white", position = position_dodge(width = 0.1)) +
+  geom_text(aes(label=cnt_vei), position=position_stack(vjust=0.5), size=5) +
+  labs(title="VEI Score") +
+  xlab("VEI Score") +
+  ylab("Eruptions") +
+  theme(legend.position = "none", text = element_text(size=18))
+```
+
+## Erupciones por tipo de montaña
+
+Se muestra el número de erupciones por tipo de montaña:
+
+```{r}
+n_eruptbytype <- v_events %>% 
+  group_by(type) %>% 
+  summarise(cnt_bytype=n())
+ggplot(data=n_eruptbytype, aes(x=reorder(type, -cnt_bytype), y=cnt_bytype, fill=type)) +
+      geom_bar(stat="identity", width=0.8, color="white", position = position_dodge(width = 0.1)) +
+      geom_text(aes(label=cnt_bytype), position=position_stack(vjust=0.5), size=5) +
+      scale_x_discrete(guide = guide_axis(angle=45)) +
+      labs(title="Mountain Type") +
+      xlab("Mountains Type") +
+      ylab("Number of mountains") +
+      theme(legend.position = "none", text = element_text(size=18))
+```
+
+## By Mountain Elevation
+
+```{r}
+fig(12,7)
+e_mounts <- v_events %>% select(name, elevation_m) %>% distinct()
+ggplot(data=e_mounts, aes(x=reorder(name, -elevation_m), y=elevation_m, fill=name)) +
+  geom_bar(stat="identity", width=0.8, color="white", position = position_dodge(width = 0.1)) +
+  scale_x_discrete(guide = guide_axis(angle=45)) +
+  # geom_text(aes(label=elevation_m), position=position_stack(vjust=0.5), size=5) +
+  labs(title="Mountain Elevation") +
+  xlab("Mountains Name") +
+  ylab("Elevation") +
+  theme(legend.position = "none", text = element_text(size=15))
+```
+
+## Erupciones mortales
+
+Aunque las erupciones extremadamente violentas que provocan pérdidas humanas son poco frecuentes, es esencial estar atentos a estos eventos cuando ocurren. La comprensión de estos fenómenos naturales puede contribuir significativamente a la prevención y mitigación de los riesgos asociados con las erupciones volcánicas. Por lo tanto, es crucial realizar un seguimiento cuidadoso de las erupciones, así como estudiar y analizar sus causas y efectos para garantizar una mejor preparación y respuesta ante posibles futuros eventos catastróficos.
+
+```{r}
+n_deathspereruptions <- v_events %>% select(name, erupt_date, total_deaths) %>% arrange(desc(total_deaths)) %>% top_n(10)
+ggplot(data=n_deathspereruptions, aes(x=reorder(name, -total_deaths), y=total_deaths, fill=name)) +
+  geom_bar(stat="identity", width=0.9, color="white") +
+  scale_x_discrete(guide = guide_axis(angle=45)) +
+  geom_text(aes(label=total_deaths), position=position_stack(vjust=0.5), size=5) +
+  labs(title="Total Deaths by Mountain") +
+  xlab("Mountains Name") +
+  ylab("Deaths") +
+  theme(legend.position = "none", text = element_text(size=15))
+```
+
+La erupción más mortal fue la del Monte Tambora el 8 de octubre de 1822, donde murieron 60,000 personas, seguida por el Monte Krakatoa el 27 de agosto de 1883. Luego, el Kelut entró en erupción dos veces, una el Año Nuevo de 1586 y otra el 19 de mayo de 1919, causando la muerte de 10,000 y 5,000 personas respectivamente.
+
+Ahora revisemos las erupciones mortales que tuvieron lugar en las últimas tres décadas.
+
+## Análisis de Distribución Normal
+
+El histograma ofrece una visión visual de las erupciones a lo largo de los años, mostrando cuántas ocurrieron en cada año. Esta representación nos permite identificar patrones y tendencias en la actividad volcánica con el tiempo. Ayuda a comprender la frecuencia y la distribución de las erupciones, lo que puede ser útil para evaluar el riesgo volcánico y tomar decisiones informadas sobre la gestión de desastres.
+
+```{r}
+n_mounts <- v_events %>% select(year) %>% filter(year>1900) 
+
+ggplot(n_mounts, aes(year)) +
+  geom_histogram(aes(x=year, y=..density..), bins = 50, fill="#d3d3d3", color="black") +
+  stat_function(fun=dnorm, args = list(mean=mean(n_mounts$year), sd=sd(n_mounts$year)), color="red") +
+  geom_density(color="blue") +
+  ggtitle("Histogram of Eruptions") +
+  xlab("Year") +
+  ylab("Density") +
+  theme_bw() 
+```
+
+El gráfico muestra la distribución normal de las elevaciones de las montañas.
+
+```{r}
+e_mounts <- v_events %>% select(elevation_m)
+ggplot(e_mounts, aes(elevation_m)) +
+  geom_histogram(aes(x=elevation_m, y=..density..), bins = 50, fill="#d3d3d3", color="black") +
+  stat_function(fun=dnorm, args = list(mean=mean(e_mounts$elevation_m), sd=sd(e_mounts$elevation_m)), color="red") +
+  geom_density(color="blue") +
+  ggtitle("Histogram of Eruptions") +
+  xlab("Elevation (m)") +
+  ylab("Density") +
+  theme_bw() 
+```
+
+Según este gráfico, se observa que los volcanes cuya elevación oscila entre 2,000 y 3,000 metros son los que presentan una mayor actividad volcánica. Este hallazgo podría tener implicaciones significativas en la comprensión de la relación entre la altitud de las montañas y su actividad volcánica, lo que podría ser útil para la investigación geológica y la gestión de riesgos volcánicos en esas áreas específicas.
+
+## Analisis de QQ
+
+Un gráfico QQ representa gráficamente datos en función de las cantidades de la variable proporcionada frente a los cuantiles que existirían si los datos siguieran una distribución normal. Se espera que los datos que siguen una distribución normal se encuentren en una línea con una pendiente específica. Al utilizar **`stat_qq()`**, se crea un gráfico QQ. El siguiente ejemplo muestra un gráfico QQ de la variable "erupciones" (n_erupts).
+
+```{r}
+y     <- quantile(n_mounts$year, c(0.25, 0.75)) # Find the 1st and 3rd quantiles
+x     <- qnorm( c(0.25, 0.75))           # Find the matching normal values on the x-axis
+slope <- diff(y) / diff(x)               # Compute the line slope
+int   <- y[1] - slope * x[1]             # Compute the line intercept
+
+ggplot(n_mounts, aes(sample = year)) +
+  stat_qq() + 
+  geom_abline(intercept = int, slope = slope, color = "blue", size = 2, alpha = 0.5 )
+```
+
+```{r}
+y     <- quantile(e_mounts$elevation_m, c(0.25, 0.75)) # Find the 1st and 3rd quantiles
+x     <- qnorm( c(0.25, 0.75))           # Find the matching normal values on the x-axis
+slope <- diff(y) / diff(x)               # Compute the line slope
+int   <- y[1] - slope * x[1]             # Compute the line intercept
+
+ggplot(e_mounts, aes(sample = elevation_m)) +
+  stat_qq() + 
+  geom_abline(intercept = int, slope = slope, color = "blue", size = 2, alpha = 0.5 )
+```
+
+## BoxPlot
+
+Ahora veamos un gráfico de caja (box plot) que muestra el tipo de montaña versus el Índice de Explosividad Volcánica (VEI).
+
+```{ndefined{r}
+p <- ggplot(v_events, aes(island, y=elevation_m))
+p + geom_boxplot(fill = "white", colour = "#3366FF") 
+```
+
+## Correlación con la elevación
+
+Este gráfico de dispersión ilustra la tendencia de las erupciones a lo largo del tiempo. En el eje X se representa el año, mientras que los círculos representan las erupciones registradas. El tamaño de los círculos refleja el número de heridos, y la magnitud de la erupción se indica por el tamaño del círculo. Aunque persiste un debate sobre cómo se registran y documentan los datos, especialmente para registros muy antiguos de hace más de 100 años, el gráfico sugiere un aumento tanto en el número como en la intensidad de las erupciones.
+
+```{r}
+library(colorspace)
+```
+
+```{r}
+fig(12, 7)
+island_cols <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#999999", "#889EAF", "#D4B499")
+e_events <- v_events 
+ggplot(data=e_events, aes(x=year, y=elevation_m)) +
+  geom_point(aes(color = island, fill = island, size = total_deaths), alpha = 0.5, shape = 21) +
+  geom_smooth(
+        aes(color = "y ~ log(x)", fill = "y ~ log(x)"),
+        method = 'loess', formula = y~log(x), se = FALSE, fullrange = TRUE) +
+  scale_size_continuous(range = c(3, 10)) +
+  scale_color_manual(values = darken(island_cols, 0.5)) +
+  scale_fill_manual(values = island_cols) +
+  labs(title="Total Eruptions in the Past 30 years")
+```
+
+Después de 1970, las erupciones muestran un incremento en la actividad volcánica. Al observar los datos solo desde 1970 en adelante, se nota que, aunque la actividad volcánica en las montañas ha ido en aumento desde 1800, el impacto, en términos de número de muertes y lesiones, está disminuyendo.
+
+```{r}
+fig(18, 12)
+e_events_1970 <- v_events %>% filter(year>1970 & elevation_m>0)
+# e_events_top10 <- e_events_1970 %>% filter(vei>2)
+ggplot(data=e_events_1970, aes(x=year, y=elevation_m)) +
+  geom_point(aes(color = island, fill = island, size = vei), alpha = 0.5, shape = 21) +
+  geom_smooth(aes(color = "y ~ log(x)", fill = "y ~ log(x)", alpha=.1), size=3,
+    method = 'loess', formula = y~log(x), se = FALSE, fullrange = TRUE) +
+  geom_text(
+    aes(label = name),
+    color = "black",
+    size = 11/.pt, # font size 9 pt
+    point.padding = 0.1, 
+    box.padding = .6,
+    min.segment.length = 0,
+    max.overlaps = 1000,
+    seed = 7654
+  ) +
+  scale_size_continuous(range = c(3, 15)) +
+  scale_color_manual(values = darken(island_cols, 0.5)) +
+  scale_fill_manual(values = island_cols) +
+  scale_x_continuous(
+    name = "Eruption Events Year 1970-2021",
+  ) +
+  scale_y_continuous(
+    name = "Elevation (m)",
+    limits = c(10, 4100),
+    breaks = c(1, 900, 1800, 2700, 3600, 3900),
+    expand = c(0, 0)
+  ) +
+  labs(title="Total Eruptions in the Past 30 years") +
+  theme_minimal_hgrid(12, rel_small = 1) +
+  theme(
+    legend.position = "bottom",
+    legend.justification = "right",
+    legend.text = element_text(size = 9),
+    legend.box.spacing = unit(0, "pt")
+  )
+```
+
+```{r}
+fig(12, 7)
+island_cols <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#999999", "#889EAF", "#D4B499")
+ve_data <- v_events %>% filter(elevation_m>0 & total_deaths<10000) %>% select(island, type, name, vei, elevation_m, total_deaths)
+ggplot(ve_data, aes(total_deaths, elevation_m)) +
+  geom_smooth(aes(color = "y ~ log(x)", fill = "y ~ log(x)"),
+        method = 'lm', formula = y~log(x), se = FALSE, fullrange = TRUE) +
+  geom_point(aes(color = island, fill = island, size = total_deaths), alpha = 0.5, shape = 21) +
+  labs(title="Elevation (m) vs Total Deaths") +
+  xlab("Total Deaths") +
+  ylab("Elevation (m)") +
+  scale_color_manual(values = darken(island_cols, 0.3)) +
+  scale_fill_manual(values = island_cols) +
+  scale_size_continuous(range = c(3, 21)) +
+  guides(size=guide_legend("Total Deaths")) +
+  guides(colour=guide_legend("Island")) +
+  theme_minimal_hgrid(12, rel_small = 1) 
+```
+
+## Mapa de volcanes
+
+Mostrar datos en un mapa es esencial para representar la ubicación de los objetos discutidos y, al mismo tiempo, para visualizar más información que se pueda relacionar con el mapa.
+
+```{r}
+library(maps)
+
+fig(20, 9)
+
+island_cols <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#999999", "#889EAF", "#D4B499")
+type_cols <- c("#6F69AC", "#95DAC1", "#FFEBA1", "#FD6F96")
+
+mydata <- e_events %>%
+  group_by(island, type, name, longitude, latitude) %>%
+  summarise(sum_erpt = n(), m_vei = mean(vei), m_elev = max(elevation_m), m_deaths = max(total_deaths))
+
+# World longitude and latitude data
+global <- map_data("world") 
+
+ggplot() + 
+  geom_polygon(data = global, aes(x=long, y = lat, group = group), 
+               fill = "gray85", color = "gray80") + 
+  coord_fixed(1.3) +
+  xlim(94,142) + ylim(-11,7.5) +
+  geom_point(data = mydata, aes(x = longitude, y = latitude, color = type, fill = type, size = m_deaths), 
+             alpha = 0.8, show.legend = FALSE, shape=24) +
+  geom_text(
+    data = mydata,
+    aes(x = longitude, y = latitude, label = name),
+    color = "grey30",
+    size = 11/.pt, # font size 9 pt
+    check_overlap = TRUE, 
+    hjust = 0, vjust = 0
+  ) +
+  ggtitle("Volcano Eruption") + 
+  scale_color_manual(values = darken(type_cols, 0.7)) +
+  scale_fill_manual(values = type_cols) +
+  scale_size_continuous(range = c(3, 9), name = "Total Deaths") +
+  theme_minimal_hgrid(12, rel_small = 1) + 
+  theme(
+    legend.position = "bottom",
+    legend.justification = "right",
+    legend.text = element_text(size = 9),
+    legend.box.spacing = unit(3, "pt")
+  )
+```
+
+# Conclusiones
+
+\
+Basándonos en la visualización de datos y en métodos estadísticos, podemos sacar las siguientes conclusiones de la información disponible:
+
+-   Java alberga la mayoría de los volcanes en el país, posiblemente en el mundo, convirtiendo a esta isla en la más propensa a riesgos.
+
+-   Más del 60% de la población del país, es decir, más de 150 millones de personas, residen en Java. A mayor altitud de una montaña, mayor probabilidad de erupción.
+
+-   La mayoría de las erupciones son de baja a moderada intensidad, con escasas víctimas mortales y daños menores.
+
+-   Las montañas con elevaciones entre 2,000 y 3,000 metros son las más activas en cuanto a actividad volcánica.
+
+-   Aunque la actividad volcánica ha aumentado desde 1800, el impacto en términos de muertes y lesiones ha disminuido con el tiempo.
+
+# Referencias:
+
+NCEI/WDS Global Significant Volcanic Eruptions Database, 4360 BC to Present Personal research for the year 2021 volcanic eruptions, from local online news media.
+
+Visualizing Data, Probability, the Normal Distribution, and Z Scores Brief History of Volcano Eruptions in Indonesia, Viz of the day, Tableau Public Gallery.
+
+<https://www.kaggle.com/code/corneliuskristianto/volcano-eruption-in-indonesia>
